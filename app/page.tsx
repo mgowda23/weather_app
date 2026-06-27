@@ -358,64 +358,13 @@ export default function Home() {
     [refreshCurrentWeather, unit]
   );
 
-  const weatherScene = dashboard?.scene ?? "sunny";
-
-  const sceneBackground = (
-    <div className="weather-scene">
-      {weatherScene === "sunny" && (
-        <>
-          <div className="weather-sun scene-float" />
-          <div className="weather-cloud medium scene-float" style={{ top: "58%", right: "8%" }} />
-          <div className="weather-cloud small scene-float" style={{ top: "22%", left: "38%", opacity: 0.65 }} />
-        </>
-      )}
-      {weatherScene === "cloudy" && (
-        <>
-          <div className="weather-cloud large scene-float" style={{ top: "18%", left: "8%" }} />
-          <div className="weather-cloud medium scene-float" style={{ top: "44%", right: "10%" }} />
-          <div className="weather-cloud small scene-float" style={{ top: "68%", left: "34%", opacity: 0.78 }} />
-        </>
-      )}
-      {weatherScene === "rainy" && (
-        <>
-          <div className="weather-cloud large scene-float" style={{ top: "14%", left: "12%" }} />
-          <div className="weather-cloud medium scene-float" style={{ top: "36%", right: "10%" }} />
-          {Array.from({ length: 18 }, (_, index) => index).map((drop) => (
-            <span
-              key={drop}
-              className="rain-drop"
-              style={{
-                left: `${5 + drop * 5}%`,
-                animationDelay: `${(drop % 6) * 0.14}s`,
-                animationDuration: `${0.95 + (drop % 5) * 0.08}s`,
-                height: `${22 + (drop % 4) * 8}px`,
-                opacity: 0.8,
-              }}
-            />
-          ))}
-        </>
-      )}
-      {weatherScene === "clear" && (
-        <>
-          <div className="weather-sun scene-float" style={{ transform: "scale(0.8)", top: "1.4rem", right: "2rem" }} />
-          <div className="weather-cloud small scene-float" style={{ top: "18%", left: "48%", opacity: 0.3 }} />
-          <div className="weather-cloud medium scene-float" style={{ top: "65%", right: "12%", opacity: 0.4 }} />
-        </>
-      )}
-    </div>
-  );
-
   return (
     <div className="relative overflow-hidden bg-[var(--page-bg)]" style={pageStyle}>
       <div className="absolute inset-0 -z-10 weather-backdrop" />
 
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
         <div className="grid gap-6 lg:grid-cols-[1.65fr_1fr]">
-          <article className="glass-panel relative isolate overflow-hidden rounded-[2rem] p-6 sm:p-8">
-            <div className="absolute inset-0 opacity-55">
-              {sceneBackground}
-            </div>
-
+          <article className="glass-panel rounded-[2rem] p-6 sm:p-8">
             <div className="relative z-10 max-w-2xl">
               <p className="text-sm font-medium uppercase tracking-[0.34em] text-sky-600">
                 {dashboard?.city ?? "Loading location"}
