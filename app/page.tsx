@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 type WeatherScene = "sunny" | "cloudy" | "rainy" | "clear";
 
+type TemperatureUnit = "fahrenheit" | "celsius";
+
 type ForecastCard = {
   time: string;
   temp: string;
@@ -147,8 +149,8 @@ function weatherDescription(code: number): string {
   return descriptions[code] ?? "Weather update";
 }
 
-function formatTemp(value: number): string {
-  return `${Math.round(value)}°`;
+function formatTemp(value: number, unit: TemperatureUnit): string {
+  return `${Math.round(value)}°${unit === "fahrenheit" ? "F" : "C"}`;
 }
 
 function formatMiles(value: number): string {
@@ -163,7 +165,7 @@ function formatWeekday(value: string): string {
   return new Date(value).toLocaleDateString([], { weekday: "short" });
 }
 
-function buildDashboard(payload: ForecastResponse, placeLabel: string): DashboardState {
+function buildDashboard(payload: ForecastResponse, placeLabel: string, unit: TemperatureUnit): DashboardState {
   const current = payload.current;
   const hourly = payload.hourly;
   const daily = payload.daily;
@@ -178,14 +180,14 @@ function buildDashboard(payload: ForecastResponse, placeLabel: string): Dashboar
   const currentIndex = Math.max(hourly.time.findIndex((time) => time === current.time), 0);
   const hourlyCards = hourly.time.slice(currentIndex, currentIndex + 6).map((time, index) => ({
     time: index === 0 ? "Now" : formatTimeLabel(time),
-    temp: formatTemp(hourly.temperature_2m[currentIndex + index]),
+    temp: formatTemp(hourly.temperature_2m[currentIndex + index], unit),
     condition: weatherDescription(hourly.weather_code[currentIndex + index]),
   }));
 
   const dailyCards = daily.time.slice(0, 4).map((time, index) => ({
     day: index === 0 ? "Today" : formatWeekday(time),
-    high: formatTemp(daily.temperature_2m_max[index]),
-    low: formatTemp(daily.temperature_2m_min[index]),
+    high: formatTemp(daily.temperature_2m_max[index], unit),
+    low: formatTemp(daily.temperature_2m_min[index], unit),
     summary: index === 0 ? condition : weatherDescription(hourly.weather_code[Math.min(currentIndex + index * 24, hourly.weather_code.length - 1)]),
   }));
 
@@ -193,9 +195,9 @@ function buildDashboard(payload: ForecastResponse, placeLabel: string): Dashboar
     scene,
     city: placeLabel,
     headline: sceneStyle.headline,
-    temp: formatTemp(current.temperature_2m),
-    feelsLike: formatTemp(current.apparent_temperature),
-    summary: `${condition}. ${placeLabel} is currently ${formatTemp(current.temperature_2m)} with feels-like ${formatTemp(current.apparent_temperature)} and ${Math.round(current.relative_humidity_2m)}% humidity.`,
+    temp: formatTemp(current.temperature_2m, unit),
+    feelsLike: formatTemp(current.apparent_temperature, unit),
+    summary: `${condition}. ${placeLabel} is currently ${formatTemp(current.temperature_2m, unit)} with feels-like ${formatTemp(current.apparent_temperature, unit)} and ${Math.round(current.relative_humidity_2m)}% humidity.`,
     status: `${sceneStyle.label} · ${condition}`,
     sunset: daily.sunset?.[0] ? new Date(daily.sunset[0]).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "Sunset unavailable",
     accent: sceneStyle.accent,
@@ -209,16 +211,19 @@ function buildDashboard(payload: ForecastResponse, placeLabel: string): Dashboar
       { label: "Pressure", value: `${Math.round(current.pressure_msl)} hPa` },
       { label: "UV Index", value: `${Math.round(current.uv_index)}` },
       { label: "Visibility", value: formatMiles(current.visibility) },
-      { label: "Feels Like", value: formatTemp(current.apparent_temperature) },
+      { label: "Feels Like", value: formatTemp(current.apparent_temperature, unit) },
     ],
   };
 }
 
 export default function Home() {
   const [query, setQuery] = useState("San Francisco");
+  const [unit, setUnit] = useState<TemperatureUnit>("fahrenheit");
   const [dashboard, setDashboard] = useState<DashboardState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [lastSearch, setLastSearch] = useState<{ kind: "query" | "geo"; query?: string } | null>(null);
 
   const pageStyle = useMemo(
     () =>
@@ -230,7 +235,37 @@ export default function Home() {
     [dashboard]
   );
 
-  const loadByQuery = useCallback(async (name: string) => {
+  useEffect(() => {
+    const storedRecentSearches = window.localStorage.getItem("weatherline-recent-searches");
+    if (storedRecentSearches) {
+      try {
+        const parsed = JSON.parse(storedRecentSearches) as string[];
+        if (Array.isArray(parsed)) {
+          setRecentSearches(parsed.filter((item) => typeof item === "string" && item.trim().length > 0).slice(0, 6));
+        }
+      } catch {
+        window.localStorage.removeItem("weatherline-recent-searches");
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("weatherline-recent-searches", JSON.stringify(recentSearches));
+  }, [recentSearches]);
+
+  const storeRecentSearch = useCallback((searchValue: string) => {
+    const normalized = searchValue.trim();
+    if (!normalized) {
+      return;
+    }
+
+    setRecentSearches((currentSearches) => {
+      const nextSearches = [normalized, ...currentSearches.filter((item) => item.toLowerCase() !== normalized.toLowerCase())];
+      return nextSearches.slice(0, 6);
+    });
+  }, []);
+
+  const loadByQuery = useCallback(async (name: string, selectedUnit: TemperatureUnit) => {
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Enter a city name first.");
@@ -241,23 +276,25 @@ export default function Home() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/weather?query=${encodeURIComponent(trimmed)}`);
+      const response = await fetch(`/api/weather?query=${encodeURIComponent(trimmed)}&unit=${selectedUnit}`);
       const data: { place?: string; forecast?: ForecastResponse; error?: string } = await response.json();
 
       if (!response.ok || !data.forecast || !data.place) {
         throw new Error(data.error ?? "Unable to load the weather forecast.");
       }
 
-      setDashboard(buildDashboard(data.forecast, data.place));
+      setDashboard(buildDashboard(data.forecast, data.place, selectedUnit));
       setQuery(trimmed);
+      setLastSearch({ kind: "query", query: trimmed });
+      storeRecentSearch(trimmed);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Something went wrong while loading weather.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [storeRecentSearch]);
 
-  const loadCurrentLocation = useCallback(() => {
+  const loadCurrentLocation = useCallback((selectedUnit: TemperatureUnit) => {
     if (!navigator.geolocation) {
       setError("Your browser does not support location access.");
       return;
@@ -270,15 +307,16 @@ export default function Home() {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-          const response = await fetch(`/api/weather?latitude=${latitude}&longitude=${longitude}`);
+          const response = await fetch(`/api/weather?latitude=${latitude}&longitude=${longitude}&unit=${selectedUnit}`);
           const data: { place?: string; forecast?: ForecastResponse; error?: string } = await response.json();
 
           if (!response.ok || !data.forecast || !data.place) {
             throw new Error(data.error ?? "Unable to load the weather forecast.");
           }
 
-          setDashboard(buildDashboard(data.forecast, data.place));
+          setDashboard(buildDashboard(data.forecast, data.place, selectedUnit));
           setQuery("My location");
+          setLastSearch({ kind: "geo" });
         } catch (loadError) {
           setError(loadError instanceof Error ? loadError.message : "Something went wrong while loading weather.");
         } finally {
@@ -293,8 +331,32 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void loadByQuery("San Francisco");
+    void loadByQuery("San Francisco", "fahrenheit");
   }, [loadByQuery]);
+
+  const refreshCurrentWeather = useCallback(
+    (selectedUnit: TemperatureUnit) => {
+      if (lastSearch?.kind === "geo") {
+        loadCurrentLocation(selectedUnit);
+        return;
+      }
+
+      void loadByQuery(lastSearch?.query ?? query, selectedUnit);
+    },
+    [lastSearch, loadByQuery, loadCurrentLocation, query]
+  );
+
+  const handleUnitChange = useCallback(
+    (nextUnit: TemperatureUnit) => {
+      if (nextUnit === unit) {
+        return;
+      }
+
+      setUnit(nextUnit);
+      refreshCurrentWeather(nextUnit);
+    },
+    [refreshCurrentWeather, unit]
+  );
 
   const weatherScene = dashboard?.scene ?? "sunny";
 
@@ -349,8 +411,10 @@ export default function Home() {
 
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
         <div className="grid gap-6 lg:grid-cols-[1.65fr_1fr]">
-          <article className="glass-panel relative overflow-hidden rounded-[2rem] p-6 sm:p-8">
-            {sceneBackground}
+          <article className="glass-panel relative isolate overflow-hidden rounded-[2rem] p-6 sm:p-8">
+            <div className="absolute inset-0 opacity-55">
+              {sceneBackground}
+            </div>
 
             <div className="relative z-10 max-w-2xl">
               <p className="text-sm font-medium uppercase tracking-[0.34em] text-sky-600">
@@ -397,7 +461,7 @@ export default function Home() {
               ]).map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-2xl border border-sky-100 bg-white/85 p-4 shadow-[0_16px_60px_rgba(15,23,42,0.05)]"
+                  className="rounded-2xl border border-sky-100 bg-white/95 p-4 shadow-[0_16px_60px_rgba(15,23,42,0.05)]"
                 >
                   <p className="text-xs uppercase tracking-[0.28em] text-sky-600">{item.label}</p>
                   <p className="mt-2 text-2xl font-semibold text-[var(--page-text)]">{item.value}</p>
@@ -423,7 +487,7 @@ export default function Home() {
               className="mt-6 flex gap-3"
               onSubmit={(event) => {
                 event.preventDefault();
-                void loadByQuery(query);
+                void loadByQuery(query, unit);
               }}
             >
               <input
@@ -443,14 +507,39 @@ export default function Home() {
             <div className="mt-3 flex gap-3">
               <button
                 type="button"
-                onClick={loadCurrentLocation}
+                onClick={() => loadCurrentLocation(unit)}
                 className="flex-1 rounded-2xl border border-sky-100 bg-white/85 px-4 py-3 text-sm font-medium text-[var(--page-text)] shadow-sm transition hover:bg-sky-50/70"
               >
                 Use my location
               </button>
             </div>
 
-            <div className="mt-6 rounded-3xl border border-sky-100 bg-white/85 p-4">
+            <div className="mt-4 rounded-3xl border border-sky-100 bg-white/92 p-4">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-[var(--page-muted)]">Temperature unit</span>
+                <div className="grid grid-cols-2 rounded-full border border-sky-100 bg-sky-50/70 p-1">
+                  {(["fahrenheit", "celsius"] as TemperatureUnit[]).map((item) => {
+                    const active = unit === item;
+                    return (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => handleUnitChange(item)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.2em] transition ${
+                          active
+                            ? "bg-white text-[var(--page-text)] shadow-sm"
+                            : "text-[var(--page-muted)] hover:text-[var(--page-text)]"
+                        }`}
+                      >
+                        {item === "fahrenheit" ? "°F" : "°C"}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-3xl border border-sky-100 bg-white/92 p-4">
               <div className="flex items-center justify-between text-sm text-[var(--page-muted)]">
                 <span>Selected location</span>
                 <span>{dashboard?.city ?? "Waiting for search"}</span>
@@ -467,14 +556,40 @@ export default function Home() {
                   type="button"
                   onClick={() => {
                     setQuery(city);
-                    void loadByQuery(city);
+                    void loadByQuery(city, unit);
                   }}
-                  className="flex w-full items-center justify-between rounded-2xl border border-sky-100 bg-white/85 px-4 py-3 text-left text-sm text-[var(--page-text)] transition hover:bg-sky-50/70"
+                  className="flex w-full items-center justify-between rounded-2xl border border-sky-100 bg-white/92 px-4 py-3 text-left text-sm text-[var(--page-text)] transition hover:bg-sky-50/70"
                 >
                   <span>{city}</span>
                   <span className="text-[var(--page-muted)]">Quick load</span>
                 </button>
               ))}
+            </div>
+
+            <div className="mt-6 rounded-3xl border border-sky-100 bg-white/92 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm uppercase tracking-[0.28em] text-sky-600">Recent searches</p>
+                <span className="text-xs text-[var(--page-muted)]">Saved locally</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {recentSearches.length === 0 ? (
+                  <span className="text-sm text-[var(--page-muted)]">No recent searches yet.</span>
+                ) : (
+                  recentSearches.map((recent) => (
+                    <button
+                      key={recent}
+                      type="button"
+                      onClick={() => {
+                        setQuery(recent);
+                        void loadByQuery(recent, unit);
+                      }}
+                      className="rounded-full border border-sky-100 bg-sky-50/80 px-3 py-2 text-xs font-medium text-[var(--page-text)] transition hover:bg-white"
+                    >
+                      {recent}
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
           </aside>
         </div>
@@ -499,7 +614,7 @@ export default function Home() {
               }))).map((hour, index) => (
                 <div
                   key={`${hour.time}-${hour.condition}-${index}`}
-                  className="rounded-2xl border border-sky-100 bg-white/85 p-4 text-center shadow-sm"
+                  className="rounded-2xl border border-sky-100 bg-white/95 p-4 text-center shadow-sm"
                 >
                   <p className="text-sm text-[var(--page-muted)]">{hour.time}</p>
                   <p className="mt-3 text-3xl font-semibold text-[var(--page-text)]">{hour.temp}</p>
@@ -528,7 +643,7 @@ export default function Home() {
               }))).map((day, index) => (
                 <div
                   key={`${day.day}-${day.high}-${index}`}
-                  className="flex items-center justify-between gap-4 rounded-2xl border border-sky-100 bg-white/85 px-4 py-4 shadow-sm"
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-sky-100 bg-white/95 px-4 py-4 shadow-sm"
                 >
                   <div>
                     <p className="text-base font-medium text-[var(--page-text)]">{day.day}</p>
