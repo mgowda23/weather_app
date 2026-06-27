@@ -1,26 +1,195 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+	--page-bg: #eef7ff;
+	--page-text: #122033;
+	--page-muted: #5d7188;
+	--page-surface: rgba(255, 255, 255, 0.84);
+	--page-surface-strong: rgba(255, 255, 255, 0.95);
+	--page-border: rgba(148, 163, 184, 0.24);
+	--page-accent: #3b82f6;
+	--page-accent-soft: rgba(59, 130, 246, 0.12);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+	box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+	height: 100%;
+	background: var(--page-bg);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+	min-height: 100%;
+	margin: 0;
+	background:
+		radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.9), transparent 18%),
+		radial-gradient(circle at 80% 14%, rgba(191, 219, 254, 0.45), transparent 22%),
+		linear-gradient(180deg, #f9fdff 0%, #eef7ff 42%, #e6f2fb 100%);
+	color: var(--page-text);
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+	font: inherit;
+}
+
+::selection {
+	background: rgba(37, 99, 235, 0.18);
+	color: #102033;
+}
+
+.glass-panel {
+	border: 1px solid var(--page-border);
+	background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), var(--page-surface));
+	backdrop-filter: blur(18px);
+	box-shadow: 0 22px 70px rgba(15, 23, 42, 0.06);
+}
+
+.glass-panel p,
+.glass-panel span,
+.glass-panel button {
+	color: inherit;
+}
+
+.weather-backdrop {
+	background:
+		radial-gradient(circle at 16% 14%, rgba(255, 255, 255, 0.9), transparent 20%),
+		radial-gradient(circle at 78% 16%, var(--page-accent-soft), transparent 24%),
+		linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(219, 234, 254, 0.22));
+}
+
+.weather-scene {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.weather-sun {
+	position: absolute;
+	top: 1.5rem;
+	right: 1.5rem;
+	width: 7rem;
+	height: 7rem;
+	border-radius: 9999px;
+	background: radial-gradient(circle, #fffbe0 0%, #ffe58f 42%, rgba(255, 229, 143, 0.3) 72%, transparent 75%);
+	box-shadow: 0 0 0 16px rgba(255, 229, 143, 0.08), 0 0 90px rgba(255, 214, 102, 0.34);
+}
+
+.weather-cloud {
+	position: absolute;
+	border-radius: 9999px;
+	background: rgba(255, 255, 255, 0.96);
+	box-shadow: 0 14px 30px rgba(148, 163, 184, 0.12);
+	animation: cloud-drift 18s ease-in-out infinite alternate;
+}
+
+.weather-cloud::before,
+.weather-cloud::after {
+	content: "";
+	position: absolute;
+	background: inherit;
+	border-radius: inherit;
+}
+
+.weather-cloud::before {
+	width: 55%;
+	height: 55%;
+	top: -28%;
+	left: 12%;
+}
+
+.weather-cloud::after {
+	width: 42%;
+	height: 42%;
+	top: -18%;
+	right: 10%;
+}
+
+.weather-cloud.small {
+	width: 8rem;
+	height: 3rem;
+}
+
+.weather-cloud.medium {
+	width: 10rem;
+	height: 3.4rem;
+}
+
+.weather-cloud.large {
+	width: 13rem;
+	height: 4.1rem;
+}
+
+.rain-drop {
+	position: absolute;
+	top: -18%;
+	width: 2px;
+	height: 26px;
+	border-radius: 9999px;
+	background: linear-gradient(180deg, rgba(37, 99, 235, 0), rgba(37, 99, 235, 0.95));
+	animation: rain-fall 1.15s linear infinite;
+}
+
+.scene-float {
+	animation: float-pulse 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.glass-panel {
+		animation: fade-up 0.45s ease-out both;
+	}
+}
+
+@keyframes fade-up {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes cloud-drift {
+	from {
+		transform: translateX(0);
+	}
+	to {
+		transform: translateX(16px);
+	}
+}
+
+@keyframes rain-fall {
+	from {
+		transform: translateY(0);
+		opacity: 0.15;
+	}
+	20% {
+		opacity: 1;
+	}
+	to {
+		transform: translateY(160%);
+		opacity: 0;
+	}
+}
+
+@keyframes float-pulse {
+	0%,
+	100% {
+		transform: translateY(0px);
+	}
+	50% {
+		transform: translateY(-6px);
+	}
 }
